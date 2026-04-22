@@ -118,7 +118,7 @@ def get_models():
 def get_videos():
     return {
         "robot": list(VIDEO_CONFIGS["robot"].keys()),
-        "drone": list(VIDEO_CONFIGS["dorne"].keys()),
+        "drone": list(VIDEO_CONFIGS["drone"].keys()),
     }
 
 
