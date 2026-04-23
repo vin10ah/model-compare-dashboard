@@ -19,22 +19,6 @@ app.add_middleware(
 
 # 일단은 하드코딩으로 시작(나중에 선택 가능하게 바꿀 예정)
 
-# MODEL_CONFIGS = {
-#     "robot": {
-#         "yolo26m_default": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/yolo26m.pt",
-#         "yolo26m_full_train": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/robot_yolo26m_100e_640img/weights/best.pt",
-#         "yolo26m_backbone_fz" : "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/robot_yolo26m_100e_640img_10fz/weights/best.pt",
-#         "yolo26m_backbone_fz10epoch": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/robot_yolo26m_100e_640img_10fz_unfz/weights/best.pt",
-#     },
-#     "drone": {
-#         "yolo26m_default": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/yolo26m.pt",
-#         "yolo26m_full_train": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/drone_yolo26m_100e_640img/weights/best.pt",
-#         "yolo26m_backbone_fz" : "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/drone_yolo26m_100e_640img_10fz2/weights/best.pt",
-#         "yolo26m_backbone_fz10epoch": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/drone_yolo26m_100e_640img_10fz_unfz/weights/best.pt",
-
-#     }
-# }
-
 ORIGIN_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/origin/*"))
 DRONE_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/drone/*"))
 ROBOT_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/robot/*"))
@@ -118,6 +102,27 @@ def draw_custom_boxes(frame, result, is_default_model, conf_thres=0.3):
 
     return frame
 
+def get_video_path(domain: str, video_name: str):
+    if domain not in VIDEO_CONFIGS:
+        return None, Response(content=b"invalid domain", status_code=404)
+    
+    if video_name not in VIDEO_CONFIGS[domain]:
+        return None, Response(content=b"video not found", status_code=404)
+    
+    video_path = VIDEO_CONFIGS[domain][video_name]
+
+    if not os.path.exists(video_path):
+        return None, Response(content=b"video not found", status_code=404)
+    
+    return video_path, None
+
+def opoen_video_capture(video_path: str):
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return None, Response(content=b"failed to open video", status_code=500)
+    
+    return cap, None
+
 # 서버 살아있는지 확인용
 @app.get("/")
 def root():
@@ -157,20 +162,13 @@ def get_frame(
     model = models[domain][model_name]
     is_default = len(model.names) > 2
 
-    if domain not in VIDEO_CONFIGS:
-        return Response(content=b"invalid domain", status_code=404)
+    video_path, error_response = get_video_path(domain, video_name)
+    if error_response:
+        return error_response
     
-    if video_name not in VIDEO_CONFIGS[domain]:
-        return Response(content=b"video not found", status_code=404)
-    
-    video_path = VIDEO_CONFIGS[domain][video_name]
-
-    if not os.path.exists(video_path):
-        return Response(content=b"video not found", status_code=404)
-
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        return Response(content=b"failed to open video", status_code=500)
+    cap, error_response = opoen_video_capture(video_path)
+    if error_response:
+        return error_response
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
     ret, frame = cap.read()
@@ -192,3 +190,33 @@ def get_frame(
     # 응답 반환 
     return Response(content=buffer.tobytes(), media_type="image/jpeg")
 
+@app.get("/video-meta")
+def get_video_meta(
+    domain: str = Query(...),
+    video_name: str = Query(...),
+):
+    video_path, error_response = get_video_path(domain, video_name)
+    if error_response:
+        return error_response
+    
+    cap, error_response = opoen_video_capture(video_path)
+    if error_response:
+        return error_response
+    
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    duration_sec = total_frames / fps if fps > 0 else 0
+
+    cap.release()
+
+    return {
+        "domain": domain,
+        "video_name": video_name,
+        "total_frames": total_frames,
+        "fps": fps,
+        "width": width,
+        "height": height,
+        "duration_sec": duration_sec,
+    }
