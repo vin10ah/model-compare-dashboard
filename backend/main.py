@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware # CORSMiddleware = React랑 �
 from ultralytics import YOLO
 import cv2
 import os
+import glob
 
 app = FastAPI() # 앱 생성(서버 생성)
 
@@ -17,31 +18,46 @@ app.add_middleware(
 )
 
 # 일단은 하드코딩으로 시작(나중에 선택 가능하게 바꿀 예정)
-VIDEO_PATH = "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/video/robot_driving_clip_1.mp4"
+
+# MODEL_CONFIGS = {
+#     "robot": {
+#         "yolo26m_default": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/yolo26m.pt",
+#         "yolo26m_full_train": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/robot_yolo26m_100e_640img/weights/best.pt",
+#         "yolo26m_backbone_fz" : "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/robot_yolo26m_100e_640img_10fz/weights/best.pt",
+#         "yolo26m_backbone_fz10epoch": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/robot_yolo26m_100e_640img_10fz_unfz/weights/best.pt",
+#     },
+#     "drone": {
+#         "yolo26m_default": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/yolo26m.pt",
+#         "yolo26m_full_train": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/drone_yolo26m_100e_640img/weights/best.pt",
+#         "yolo26m_backbone_fz" : "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/drone_yolo26m_100e_640img_10fz2/weights/best.pt",
+#         "yolo26m_backbone_fz10epoch": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/drone_yolo26m_100e_640img_10fz_unfz/weights/best.pt",
+
+#     }
+# }
+
+ORIGIN_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/origin/*"))
+DRONE_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/drone/*"))
+ROBOT_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/robot/*"))
+
+def make_model_dict(paths, prefix=""):
+    return {
+        f"{prefix}{os.path.splitext(os.path.basename(path))[0]}": path
+        for path in paths
+    }
 
 MODEL_CONFIGS = {
-    "robot": {
-        "yolo26m_default": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/yolo26m.pt",
-        "yolo26m_full_train": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/robot_yolo26m_100e_640img/weights/best.pt",
-        "yolo26m_backbone_fz" : "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/robot_yolo26m_100e_640img_10fz/weights/best.pt",
-        "yolo26m_backbone_fz10epoch": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/robot_yolo26m_100e_640img_10fz_unfz/weights/best.pt",
-    },
     "drone": {
-        "yolo26m_default": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/yolo26m.pt",
-        "yolo26m_full_train": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/drone_yolo26m_100e_640img/weights/best.pt",
-        "yolo26m_backbone_fz" : "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/drone_yolo26m_100e_640img_10fz2/weights/best.pt",
-        "yolo26m_backbone_fz10epoch": "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/runs/detect/results_train/drone_yolo26m_100e_640img_10fz_unfz/weights/best.pt",
-
-    }
+        **make_model_dict(ORIGIN_MODEL_PATHS, prefix="origin_"),
+        **make_model_dict(DRONE_MODEL_PATHS),
+    },
+    "robot": {
+        **make_model_dict(ORIGIN_MODEL_PATHS, prefix="origin_"),
+        **make_model_dict(ROBOT_MODEL_PATHS),
+    },
 }
-ROBOT_VID_LISTS = [
-    "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/robot/robot_driving_clip_1.mp4",
-    "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/robot/robot_driving_clip_2.mp4"
-]
 
-DRONE_VID_LISTS = [
-    "/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/drone/131979_1204_1626.mp4",
-]
+ROBOT_VID_LISTS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/robot/*"))
+DRONE_VID_LISTS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/drone/*"))
 
 VIDEO_CONFIGS = {
     "robot": {f"robot_vid_{i}": ROBOT_VID_LISTS[i] for i in range(len(ROBOT_VID_LISTS))},

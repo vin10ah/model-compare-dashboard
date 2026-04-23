@@ -9,29 +9,34 @@ type DomainItemsResponse = {
 
 function App() {
   const [domain, setDomain] = useState<Domain>('robot')
-
+  // 백엔드 /models 에서 받아온 결과 저장하는 곳, 처음엔 빈 배열
   const [modelsByDomain, setModelsByDomain] = useState<DomainItemsResponse>({
     robot: [],
     drone: [],
   })
 
+  // /videos 결과 저장용, 처음엔 비어 있고, fetch 후 채워짐
   const [videosByDomain, setVideosByDomain] = useState<DomainItemsResponse>({
     robot: [],
     drone: [],
   })
-
+  
+  // 현재 선택된 영상 이름
   const [videoName, setVideoName] = useState<string>('')
 
+  // 모델 4개 담는 배열
   const [selectedModels, setSelectedModels] = useState<string[]>([
     '',
     '',
     '',
     '',
   ])
-
+  
+  // /frame 요청에 그대로 들어갈 값
   const [frameIdx, setFrameIdx] = useState<number>(0)
   const [conf, setConf] = useState<number>(0.3)
 
+  // 현재 도메인 기준 목록 뽑기
   const currentModelOptions = useMemo(() => {
     return modelsByDomain[domain] ?? []
   }, [modelsByDomain, domain])
@@ -40,13 +45,26 @@ function App() {
     return videosByDomain[domain] ?? []
   }, [videosByDomain, domain])
 
+  const [errorMessage, setErrorMessage] = useState('')
+
+  // 처음 한 번 fetch
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
+        setErrorMessage('')
+
         const [modelsRes, videosRes] = await Promise.all([
           fetch('http://127.0.0.1:8000/models'),
           fetch('http://127.0.0.1:8000/videos'),
         ])
+
+      if (!modelsRes.ok) {
+        throw new Error(`/models 요청 실패: ${modelsRes.status}`)
+      }
+
+      if (!videosRes.ok) {
+        throw new Error(`/videos 요청 실패: ${videosRes.status}`)
+      }
 
         const modelsData: DomainItemsResponse = await modelsRes.json()
         const videosData: DomainItemsResponse = await videosRes.json()
@@ -77,19 +95,29 @@ function App() {
       currentModelOptions[3] ?? currentModelOptions[0] ?? '',
     ])
   }, [currentModelOptions])
-
+  
+  // 드롭다운에서 모델 바꾸면 해당 칸만 바꾸는 함수
   const handleModelChange = (index: number, modelName: string) => {
     const next = [...selectedModels]
     next[index] = modelName
     setSelectedModels(next)
   }
 
+
+
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>/
       <h1>Model Compare Dashboard</h1>
+
+      {errorMessage && (
+        <div style={{ color: 'red', marginBottom: '16px' }}>
+          에러: {errorMessage}
+        </div>
+        )}
 
       <div style={{ marginBottom: '16px' }}>
         <label style={{ marginRight: '8px' }}>Domain</label>
+        {/* domain select */}
         <select
           value={domain}
           onChange={(e) => setDomain(e.target.value as Domain)}
@@ -105,6 +133,7 @@ function App() {
           value={videoName}
           onChange={(e) => setVideoName(e.target.value)}
         >
+          {/* video select */}
           {currentVideoOptions.map((video) => (
             <option key={video} value={video}>
               {video}
@@ -115,6 +144,7 @@ function App() {
 
       <div style={{ marginBottom: '16px' }}>
         <label>Frame: {frameIdx}</label>
+        {/* frame slider */}
         <input
           type="range"
           min="0"
