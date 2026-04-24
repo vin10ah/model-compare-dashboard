@@ -47,6 +47,10 @@ function App() {
 
   const [errorMessage, setErrorMessage] = useState('')
 
+  const [totalFrames, setTotalFrames] = useState<number>(300)
+  const [fps, setFPS] = useState<number>(0)
+  const [isPlaying, setIsPlaying] = useState<boolean>(false)
+
   // 처음 한 번 fetch
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -103,10 +107,73 @@ function App() {
     setSelectedModels(next)
   }
 
+  const moveFrame = (delta: number) => {
+    setIsPlaying(false)
+
+    setFrameIdx((prev) => {
+      const next = prev +delta
+      const maxFrame = Math.max(totalFrames -1, 0)
+
+      if (next < 0) return 0
+      if (next > maxFrame) return maxFrame
+
+      return next
+    })
+  }
+
+
+
+  useEffect(() => {
+    const fetchVideoMeta = async () => {
+      if(!videoName) return
+
+      try {
+        const res = await fetch(
+          `http://127.0.0.1:8000/video-meta?domain=${domain}&video_name=${videoName}`
+        )
+
+        if (!res.ok) {
+          throw new Error(`/video-meta 요청 실패: ${res.status}`)
+        }
+
+        const data = await res.json()
+
+        setTotalFrames(data.total_frames)
+        setFPS(data.fps)
+        setFrameIdx(0)
+        setIsPlaying(false)
+      } catch (error) {
+        console.error('비디오 메타데이터 조회 실패:', error)
+      }
+    }
+
+    fetchVideoMeta()
+  }, [domain, videoName])
+  
+  // Play/Pause 자동 재생 추가
+  useEffect(() => {
+    if (!isPlaying) return
+
+    const interval = setInterval(() => {
+      setFrameIdx((prev) => {
+        const next = prev + 1
+
+        if (next >= totalFrames) {
+          setIsPlaying(false)
+          return prev
+        }
+
+        return next
+      })
+    }, 500) // 100 => 0.1초마다 1프레임 이동
+
+    return () => clearInterval(interval)
+  }, [isPlaying, totalFrames])
+
 
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>/
+    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h1>Model Compare Dashboard</h1>
 
       {errorMessage && (
@@ -115,9 +182,9 @@ function App() {
         </div>
         )}
 
+      {/* domain select */}
       <div style={{ marginBottom: '16px' }}>
         <label style={{ marginRight: '8px' }}>Domain</label>
-        {/* domain select */}
         <select
           value={domain}
           onChange={(e) => setDomain(e.target.value as Domain)}
@@ -127,13 +194,14 @@ function App() {
         </select>
       </div>
 
+      {/* video select */}
       <div style={{ marginBottom: '16px' }}>
         <label style={{ marginRight: '8px' }}>Video</label>
         <select
           value={videoName}
           onChange={(e) => setVideoName(e.target.value)}
         >
-          {/* video select */}
+          
           {currentVideoOptions.map((video) => (
             <option key={video} value={video}>
               {video}
@@ -141,21 +209,9 @@ function App() {
           ))}
         </select>
       </div>
-
-      <div style={{ marginBottom: '16px' }}>
-        <label>Frame: {frameIdx}</label>
-        {/* frame slider */}
-        <input
-          type="range"
-          min="0"
-          max="300"
-          value={frameIdx}
-          onChange={(e) => setFrameIdx(Number(e.target.value))}
-          style={{ width: '400px', marginLeft: '12px' }}
-        />
-      </div>
-
-      <div style={{ marginBottom: '24px' }}>
+      
+      {/* confidence slider */}
+      <div style={{ marginBottom: '10px' }}>
         <label>Confidence: {conf.toFixed(2)}</label>
         <input
           type="range"
@@ -167,6 +223,76 @@ function App() {
           style={{ width: '400px', marginLeft: '12px' }}
         />
       </div>
+
+      
+      {/* frame slider */}
+      <div style={{ marginBottom: '10px' }}>
+        <label>Frame: {frameIdx}</label>
+        <input
+          type="range"
+          min="0"
+          max={Math.max(totalFrames - 1, 0)}
+          value={frameIdx}
+          onChange={(e) => {
+            setFrameIdx(Number(e.target.value))
+            setIsPlaying(false)
+          }}
+          style={{ width: '400px', marginLeft: '12px' }}
+        />
+      </div>
+
+      <div style={{ marginBottom: '10px' }}>
+        <button onClick={() => moveFrame(-100)}>-100</button>
+        <button onClick={() => moveFrame(-10)} style={{ marginLeft: '8px' }}>
+          -10
+        </button>
+        <button onClick={() => moveFrame(-1)} style={{ marginLeft: '8px' }}>
+          -1
+        </button>
+
+        <button onClick={() => moveFrame(1)} style={{ marginLeft: '16px' }}>
+          +1
+        </button>
+        <button onClick={() => moveFrame(10)} style={{ marginLeft: '8px' }}>
+          +10
+        </button>
+        <button onClick={() => moveFrame(100)} style={{ marginLeft: '8px' }}>
+          +100
+        </button>
+
+        <button
+          onClick={() => {
+            setFrameIdx(0)
+            setIsPlaying(false)
+          }}
+          style={{ marginLeft: '16px' }}
+        >
+          Reset
+        </button>
+      </div>
+
+      {/* play/pause button */}
+      <div style={{ marginBottom: '12px' }}>
+        <button onClick={() => setIsPlaying((prev) => !prev)}>
+          {isPlaying ? 'Pause' : 'Play'}  
+        </button>
+
+        <button
+          onClick={() => {
+            setFrameIdx(0)
+            setIsPlaying(false)
+          }}
+          style={{ marginLeft: '8px' }}
+        >
+          Reset
+        </button>
+
+        <span style={{ marginLeft: '12px' }}>
+          Total Frames: {totalFrames} | FPS: {fps.toFixed(2)}
+        </span>
+
+      </div>
+      
 
       <div
         style={{
