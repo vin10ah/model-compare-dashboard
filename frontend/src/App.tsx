@@ -20,6 +20,40 @@ function App() {
     robot: [],
     drone: [],
   })
+
+  const [errorMessage, setErrorMessage] = useState('')
+
+  const fetchInitialData = async () => {
+    try {
+      setErrorMessage('')
+
+      const [modelsRes, videosRes] = await Promise.all([
+        fetch('http://127.0.0.1:8000/models'),
+        fetch('http://127.0.0.1:8000/videos'),
+      ])
+
+      if (!modelsRes.ok) {
+        throw new Error(`/models 요청 실패: ${modelsRes.status}`)
+      }
+
+      if (!videosRes.ok) {
+        throw new Error(`/videos 요청 실패: ${videosRes.status}`)
+      }
+
+      const modelsData: DomainItemsResponse = await modelsRes.json()
+      const videosData: DomainItemsResponse = await videosRes.json()
+
+      setModelsByDomain(modelsData)
+      setVideosByDomain(videosData)
+    } catch (error) {
+      console.error('초기 데이터 조회 실패:', error)
+      setErrorMessage(String(error))
+    }
+  }
+
+  useEffect(() => {
+    fetchInitialData()
+  }, [])
   
   // 현재 선택된 영상 이름
   const [videoName, setVideoName] = useState<string>('')
@@ -45,43 +79,11 @@ function App() {
     return videosByDomain[domain] ?? []
   }, [videosByDomain, domain])
 
-  const [errorMessage, setErrorMessage] = useState('')
 
-  const [totalFrames, setTotalFrames] = useState<number>(300)
+
+  const [totalFrames, setTotalFrames] = useState<number>(0)
   const [fps, setFPS] = useState<number>(0)
-  const [isPlaying, setIsPlaying] = useState<boolean>(false)
 
-  // 처음 한 번 fetch
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        setErrorMessage('')
-
-        const [modelsRes, videosRes] = await Promise.all([
-          fetch('http://127.0.0.1:8000/models'),
-          fetch('http://127.0.0.1:8000/videos'),
-        ])
-
-      if (!modelsRes.ok) {
-        throw new Error(`/models 요청 실패: ${modelsRes.status}`)
-      }
-
-      if (!videosRes.ok) {
-        throw new Error(`/videos 요청 실패: ${videosRes.status}`)
-      }
-
-        const modelsData: DomainItemsResponse = await modelsRes.json()
-        const videosData: DomainItemsResponse = await videosRes.json()
-
-        setModelsByDomain(modelsData)
-        setVideosByDomain(videosData)
-      } catch (error) {
-        console.error('초기 데이터 조회 실패:', error)
-      }
-    }
-
-    fetchInitialData()
-  }, [])
 
   useEffect(() => {
     const firstVideo = currentVideoOptions[0] ?? ''
@@ -108,8 +110,6 @@ function App() {
   }
 
   const moveFrame = (delta: number) => {
-    setIsPlaying(false)
-
     setFrameIdx((prev) => {
       const next = prev +delta
       const maxFrame = Math.max(totalFrames -1, 0)
@@ -137,43 +137,26 @@ function App() {
         }
 
         const data = await res.json()
+        console.log('video meta:', data)
 
         setTotalFrames(data.total_frames)
         setFPS(data.fps)
         setFrameIdx(0)
-        setIsPlaying(false)
+
       } catch (error) {
         console.error('비디오 메타데이터 조회 실패:', error)
+        setErrorMessage(String(error))
       }
     }
 
     fetchVideoMeta()
   }, [domain, videoName])
   
-  // Play/Pause 자동 재생 추가
-  useEffect(() => {
-    if (!isPlaying) return
-
-    const interval = setInterval(() => {
-      setFrameIdx((prev) => {
-        const next = prev + 1
-
-        if (next >= totalFrames) {
-          setIsPlaying(false)
-          return prev
-        }
-
-        return next
-      })
-    }, 500) // 100 => 0.1초마다 1프레임 이동
-
-    return () => clearInterval(interval)
-  }, [isPlaying, totalFrames])
-
-
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
+      <button onClick={fetchInitialData}>Refresh models/videos</button>
+
       <h1>Model Compare Dashboard</h1>
 
       {errorMessage && (
@@ -224,7 +207,12 @@ function App() {
         />
       </div>
 
-      
+      {/* total frames */}
+      <div style={{ marginBottom: '10px' }}>
+        Total Frames: {totalFrames} | FPS: {fps.toFixed(2)}
+      </div>
+
+  
       {/* frame slider */}
       <div style={{ marginBottom: '10px' }}>
         <label>Frame: {frameIdx}</label>
@@ -235,7 +223,6 @@ function App() {
           value={frameIdx}
           onChange={(e) => {
             setFrameIdx(Number(e.target.value))
-            setIsPlaying(false)
           }}
           style={{ width: '400px', marginLeft: '12px' }}
         />
@@ -263,36 +250,13 @@ function App() {
         <button
           onClick={() => {
             setFrameIdx(0)
-            setIsPlaying(false)
           }}
           style={{ marginLeft: '16px' }}
         >
           Reset
         </button>
       </div>
-
-      {/* play/pause button */}
-      <div style={{ marginBottom: '12px' }}>
-        <button onClick={() => setIsPlaying((prev) => !prev)}>
-          {isPlaying ? 'Pause' : 'Play'}  
-        </button>
-
-        <button
-          onClick={() => {
-            setFrameIdx(0)
-            setIsPlaying(false)
-          }}
-          style={{ marginLeft: '8px' }}
-        >
-          Reset
-        </button>
-
-        <span style={{ marginLeft: '12px' }}>
-          Total Frames: {totalFrames} | FPS: {fps.toFixed(2)}
-        </span>
-
-      </div>
-      
+    
 
       <div
         style={{

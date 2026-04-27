@@ -24,9 +24,9 @@ app.add_middleware(
 
 # 일단은 하드코딩으로 시작(나중에 선택 가능하게 바꿀 예정)
 
-ORIGIN_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/origin/*"))
-DRONE_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/drone/*"))
-ROBOT_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/robot/*"))
+# ORIGIN_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/origin/*"))
+# DRONE_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/drone/*"))
+# ROBOT_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/robot/*"))
 
 def make_model_dict(paths, prefix=""):
     return {
@@ -34,33 +34,80 @@ def make_model_dict(paths, prefix=""):
         for path in paths
     }
 
-MODEL_CONFIGS = {
-    "drone": {
+# MODEL_CONFIGS = {
+#     "drone": {
+#         **make_model_dict(ORIGIN_MODEL_PATHS, prefix="origin_"),
+#         **make_model_dict(DRONE_MODEL_PATHS),
+#     },
+#     "robot": {
+#         **make_model_dict(ORIGIN_MODEL_PATHS, prefix="origin_"),
+#         **make_model_dict(ROBOT_MODEL_PATHS),
+#     },
+# }
+
+# ROBOT_VID_LISTS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/robot/*"))
+# DRONE_VID_LISTS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/drone/*"))
+
+# VIDEO_CONFIGS = {
+#     "robot": {f"robot_vid_{i}": ROBOT_VID_LISTS[i] for i in range(len(ROBOT_VID_LISTS))},
+#     "drone": {f"drone_vid_{i}": DRONE_VID_LISTS[i] for i in range(len(DRONE_VID_LISTS))}
+# }
+
+# # 서버 시작할 때 한 번만 로드
+# models = {}
+
+# for domain, domain_models in MODEL_CONFIGS.items():
+#     models[domain] = {}
+#     for model_name, model_path in domain_models.items():
+#         models[domain][model_name] = YOLO(model_path)
+
+
+# 모델, 비디오 반환 함수
+def get_model_configs():
+    ORIGIN_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/origin/*"))
+    DRONE_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/drone/*"))
+    ROBOT_MODEL_PATHS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/models/robot/*"))
+
+    return {
+        "drone": {
         **make_model_dict(ORIGIN_MODEL_PATHS, prefix="origin_"),
         **make_model_dict(DRONE_MODEL_PATHS),
-    },
-    "robot": {
-        **make_model_dict(ORIGIN_MODEL_PATHS, prefix="origin_"),
-        **make_model_dict(ROBOT_MODEL_PATHS),
-    },
-}
+        },
+        "robot": {
+            **make_model_dict(ORIGIN_MODEL_PATHS, prefix="origin_"),
+            **make_model_dict(ROBOT_MODEL_PATHS),
+        },
+    }
 
-ROBOT_VID_LISTS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/robot/*"))
-DRONE_VID_LISTS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/drone/*"))
+def get_video_configs():
+    ROBOT_VID_LISTS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/robot/*"))
+    DRONE_VID_LISTS = sorted(glob.glob("/home/seobin1027/tasks2/연구과제/드론로봇/upgrade-ver/videos/drone/*"))
 
-VIDEO_CONFIGS = {
-    "robot": {f"robot_vid_{i}": ROBOT_VID_LISTS[i] for i in range(len(ROBOT_VID_LISTS))},
-    "drone": {f"drone_vid_{i}": DRONE_VID_LISTS[i] for i in range(len(DRONE_VID_LISTS))}
-}
+    return {
+        "robot": {f"{os.path.splitext(os.path.basename(path))[0]}": path for path in ROBOT_VID_LISTS},
+        "drone": {f"{os.path.splitext(os.path.basename(path))[0]}": path for path in DRONE_VID_LISTS},
+    }
 
-# 서버 시작할 때 한 번만 로드
-models = {}
 
-for domain, domain_models in MODEL_CONFIGS.items():
-    models[domain] = {}
-    for model_name, model_path in domain_models.items():
-        models[domain][model_name] = YOLO(model_path)
+# 모델 가져오는 함수
+loaded_models = {}
 
+def get_loaded_model(domain: str, model_name: str):
+    model_configs = get_model_configs()
+
+    if domain not in model_configs:
+        return None, Response(content=b"invalid domain", status_code=404)
+    
+    if model_name not in model_configs[domain]:
+        return None, Response(content=b"model not found", status_code=404)
+    
+    model_path = model_configs[domain][model_name]
+    cache_key = f"{domain}:{model_name}"
+
+    if cache_key not in loaded_models:
+        loaded_models[cache_key] = YOLO(model_path)
+
+    return loaded_models[cache_key], None
 
 
 # 박스 그리는 함수
@@ -108,20 +155,21 @@ def draw_custom_boxes(frame, result, is_default_model, conf_thres=0.3):
     return frame
 
 def get_video_path(domain: str, video_name: str):
-    if domain not in VIDEO_CONFIGS:
+    configs = get_video_configs()
+    if domain not in configs:
         return None, Response(content=b"invalid domain", status_code=404)
     
-    if video_name not in VIDEO_CONFIGS[domain]:
+    if video_name not in configs[domain]:
         return None, Response(content=b"video not found", status_code=404)
     
-    video_path = VIDEO_CONFIGS[domain][video_name]
+    video_path = configs[domain][video_name]
 
     if not os.path.exists(video_path):
         return None, Response(content=b"video not found", status_code=404)
     
     return video_path, None
 
-def opoen_video_capture(video_path: str):
+def open_video_capture(video_path: str):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         return None, Response(content=b"failed to open video", status_code=500)
@@ -135,16 +183,18 @@ def root():
 
 @app.get("/models")
 def get_models():
+    configs = get_model_configs()
     return {
-        "robot": list(MODEL_CONFIGS["robot"].keys()),
-        "drone": list(MODEL_CONFIGS["drone"].keys()),
+        "robot": list(configs["robot"].keys()),
+        "drone": list(configs["drone"].keys()),
     }
 
 @app.get("/videos")
 def get_videos():
+    configs = get_video_configs()
     return {
-        "robot": list(VIDEO_CONFIGS["robot"].keys()),
-        "drone": list(VIDEO_CONFIGS["drone"].keys()),
+        "robot": list(configs["robot"].keys()),
+        "drone": list(configs["drone"].keys()),
     }
 
 
@@ -158,20 +208,22 @@ def get_frame(
     frame_idx: int = Query(0, ge=0),
     conf: float = Query(0.3, ge=0.0, le=1.0),
 ):  
-    if domain not in models:
-        return Response(content=b"invalid domain", status_code=404)
+    print("FRAME REQUEST:", domain, video_name, model_name, frame_idx, conf)
+
+    model, error_response = get_loaded_model(domain, model_name)
+
+    if error_response:
+        return error_response
     
-    if model_name not in models[domain]:
-        return Response(content=b"model not found", status_code=404)
-    
-    model = models[domain][model_name]
+    print("MODEL LOADED")
+
     is_default = len(model.names) > 2
 
     video_path, error_response = get_video_path(domain, video_name)
     if error_response:
         return error_response
     
-    cap, error_response = opoen_video_capture(video_path)
+    cap, error_response = open_video_capture(video_path)
     if error_response:
         return error_response
 
@@ -184,7 +236,9 @@ def get_frame(
     
     frame = cv2.resize(frame, (640, 360))
 
+    print("BEFORE INFER")
     results = model(frame, verbose=False)
+    print("AFTER INFER")
     result = results[0]
     vis_frame = draw_custom_boxes(frame.copy(), result, is_default, conf_thres=conf)
 
@@ -204,7 +258,7 @@ def get_video_meta(
     if error_response:
         return error_response
     
-    cap, error_response = opoen_video_capture(video_path)
+    cap, error_response = open_video_capture(video_path)
     if error_response:
         return error_response
     
