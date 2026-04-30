@@ -59,13 +59,15 @@ function App() {
   const [videoName, setVideoName] = useState<string>('')
 
   // 모델 4개 담는 배열
-  const [selectedModels, setSelectedModels] = useState<string[]>([
-    '',
-    '',
-    '',
-    '',
-  ])
-  
+  const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [modelSearch, setModelSearch] = useState<string>('')
+
+  useEffect(() => {
+    setSelectedModels([])
+    setModelSearch('')
+  }, [domain])
+
+
   // /frame 요청에 그대로 들어갈 값
   const [frameIdx, setFrameIdx] = useState<number>(0)
   const [conf, setConf] = useState<number>(0.3)
@@ -79,6 +81,16 @@ function App() {
     return videosByDomain[domain] ?? []
   }, [videosByDomain, domain])
 
+  const filteredModelOptions = useMemo(() => {
+    const keyword = modelSearch.trim().toLowerCase()
+
+    if (!keyword) return currentModelOptions
+
+    return currentModelOptions.filter((model) =>
+      model.toLowerCase().includes(keyword)
+    )
+  }, [currentModelOptions, modelSearch])
+
 
 
   const [totalFrames, setTotalFrames] = useState<number>(0)
@@ -91,23 +103,23 @@ function App() {
     setFrameIdx(0)
   }, [domain, currentVideoOptions])
 
-  useEffect(() => {
-    if (currentModelOptions.length === 0) return
+  // 모델 선택 함수
+  const toggleModel = (modelName: string) => {
+    setSelectedModels((prev) => {
+      if (prev.includes(modelName)) {
+        return prev.filter((m) => m !==modelName)
+      }
 
-    setSelectedModels([
-      currentModelOptions[0] ?? '',
-      currentModelOptions[1] ?? currentModelOptions[0] ?? '',
-      currentModelOptions[2] ?? currentModelOptions[0] ?? '',
-      currentModelOptions[3] ?? currentModelOptions[0] ?? '',
-    ])
-  }, [currentModelOptions])
-  
-  // 드롭다운에서 모델 바꾸면 해당 칸만 바꾸는 함수
-  const handleModelChange = (index: number, modelName: string) => {
-    const next = [...selectedModels]
-    next[index] = modelName
-    setSelectedModels(next)
+      if (prev.length >= 4) {
+        setErrorMessage('모델은 최대 4개까지만 선택할 수 있습니다.')
+        return prev
+      }
+
+      setErrorMessage('')
+      return [...prev, modelName]
+    })
   }
+  
 
   const moveFrame = (delta: number) => {
     setFrameIdx((prev) => {
@@ -120,7 +132,6 @@ function App() {
       return next
     })
   }
-
 
 
   useEffect(() => {
@@ -139,6 +150,7 @@ function App() {
         const data = await res.json()
         console.log('video meta:', data)
 
+        setErrorMessage('')   
         setTotalFrames(data.total_frames)
         setFPS(data.fps)
         setFrameIdx(0)
@@ -165,34 +177,125 @@ function App() {
         </div>
         )}
 
-      {/* domain select */}
-      <div style={{ marginBottom: '16px' }}>
-        <label style={{ marginRight: '8px' }}>Domain</label>
-        <select
-          value={domain}
-          onChange={(e) => setDomain(e.target.value as Domain)}
-        >
-          <option value="robot">robot</option>
-          <option value="drone">drone</option>
-        </select>
+    {/* model checkbox selector */}
+    <div
+      style={{
+        margin: '0 auto 20px',
+        padding: '12px',
+        border: '1px solid #ccc',
+        borderRadius: '8px',
+        maxWidth: '720px',
+        textAlign: 'left',
+      }}
+    >
+      <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
+        Select Models: {selectedModels.length} / 4
       </div>
 
-      {/* video select */}
-      <div style={{ marginBottom: '16px' }}>
-        <label style={{ marginRight: '8px' }}>Video</label>
-        <select
-          value={videoName}
-          onChange={(e) => setVideoName(e.target.value)}
-        >
-          
-          {currentVideoOptions.map((video) => (
-            <option key={video} value={video}>
-              {video}
-            </option>
-          ))}
-        </select>
-      </div>
+      <input
+        type="text"
+        placeholder="Search model..."
+        value={modelSearch}
+        onChange={(e) => setModelSearch(e.target.value)}
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          marginBottom: '10px',
+          padding: '6px',
+        }}
+      />
+
+      {/* domain & video select row */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '160px 1fr',
+          gap: '16px',
+          marginBottom: '12px',
+          alignItems: 'end',
+        }}
+      >
       
+        {/* domain */}
+        <div>
+          <label style={{ display:'block', marginBottom: '4px' }}>Domain</label>
+          <select
+            value={domain}
+            onChange={(e) => setDomain(e.target.value as Domain)}
+            style={{ width: '100%'}}
+          >
+            <option value="robot">robot</option>
+            <option value="drone">drone</option>
+          </select>
+        </div>
+
+        {/* video */}
+        <div>
+          <label style={{ display:'block', marginBottom: '4px' }}>Video</label>
+          <select
+            value={videoName}
+            onChange={(e) => setVideoName(e.target.value)}
+            style={{ width: '100%'}}
+            
+          >
+            {currentVideoOptions.map((video) => (
+              <option key={video} value={video}>
+                {video}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+
+
+        <div
+          style={{
+            maxHeight: '160px',
+            overflowY: 'auto',
+            border: '1px solid #ddd',
+            padding: '8px',
+            borderRadius: '6px',
+            backgroundColor: '#fafafa',
+          }}
+        >
+          {filteredModelOptions.length > 0 ? (
+            filteredModelOptions.map((model) => {
+              const checked = selectedModels.includes(model)
+              const disabled = !checked && selectedModels.length >= 4
+
+              return (
+                <label
+                  key={model}
+                  style={{
+                    display: 'block',
+                    marginBottom: '6px',
+                    opacity: disabled ? 0.5 : 1,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => toggleModel(model)}
+                  />
+                  <span style={{ marginLeft: '8px' }}>{model}</span>
+                </label>
+              )
+            })
+          ) : (
+            <div>검색 결과가 없습니다.</div>
+          )}
+        </div>
+
+        {selectedModels.length > 0 && (
+          <div style={{ marginTop: '10px', fontSize: '14px' }}>
+            <strong>Selected:</strong> {selectedModels.join(', ')}
+          </div>
+        )}
+      </div>
+
       {/* confidence slider */}
       <div style={{ marginBottom: '10px' }}>
         <label>Confidence: {conf.toFixed(2)}</label>
@@ -256,12 +359,17 @@ function App() {
           Reset
         </button>
       </div>
-    
+          
+      {selectedModels.length === 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          비교할 모델을 최대 4개까지 선택하세요.
+        </div>
+      )}
 
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
+          gridTemplateColumns: selectedModels.length <= 1 ? '1fr' : '1fr 1fr',
           gap: '16px',
         }}
       >
@@ -280,23 +388,13 @@ function App() {
                 padding: '12px',
               }}
             >
-              <div style={{ marginBottom: '8px' }}>
-                <label style={{ marginRight: '8px' }}>Model {index + 1}</label>
-                <select
-                  value={modelName}
-                  onChange={(e) => handleModelChange(index, e.target.value)}
-                >
-                  {currentModelOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+              <div style={{ marginBottom: '8px', fontSize: '14px' }}>
+                <strong>Model {index + 1}: {modelName}</strong>
               </div>
 
-              <div style={{ marginBottom: '8px', fontSize: '14px' }}>
+              {/* <div style={{ marginBottom: '8px', fontSize: '14px' }}>
                 <strong>{modelName || `Model ${index + 1}`}</strong>
-              </div>
+              </div> */}
 
               {imageUrl ? (
                 <img
